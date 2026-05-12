@@ -13,6 +13,11 @@
 #   bear-den-vention  10.210.29.15          (Vention rail)         — rail hardware (driven by the arm worker)
 #   Opentrons Flex    10.210.29.218         (00:14:2D:EC:99:70)    — liquid handler (placeholder client only)
 #   bear-den-panda    10.210.29.13   debian  user panda            — (not used here)
+#
+# The optional `ssh:` blocks let `polymer-indent workers {status,up,down,restart,logs}`
+# start/stop a station worker on its Pi over SSH. Key-based auth only (no
+# passwords here or anywhere) — run `ssh-copy-id <user>@<host>` from the
+# controller first, or set `key:` to a private key path.
 
 stations:
   sharc:                                                  # UV-curing station = bear-den-scale
@@ -21,6 +26,14 @@ stations:
     deck_config:   configs/deck/sharc_deck.yaml            # verbatim cubos@staging sharc_uv_deck.yaml
     base_protocol: configs/protocol/sharc_uv_one_well.yaml # well id rewritten per iteration
     timeout_s: 900
+    ssh:                                                   # for `polymer-indent workers ... sharc`
+      host: 10.210.29.12
+      user: sartorius-scale
+      repo_dir: ~/polymer_indent                           # where this repo is checked out on the Pi
+      python: .venv/bin/python                             # python to launch the worker (rel. to repo_dir, or absolute)
+      station_config: configs/stations/sharc.yaml          # rel. to repo_dir
+      # key: ~/.ssh/id_ed25519                             # optional; omit to use ssh's default key/agent
+      # log: worker.log                                    # rel. to repo_dir (default)
 
   asmi:                                                   # ASMI station = bear-den-asmi
     base_url: "http://10.210.29.17:8000"
@@ -28,15 +41,23 @@ stations:
     deck_config:   configs/deck/asmi_deck.yaml             # verbatim ASMI_new asmi_deck.yaml
     base_protocol: configs/protocol/asmi_indentation_test.yaml  # verbatim ASMI_new; well id rewritten per iteration
     timeout_s: 900
+    ssh:
+      host: 10.210.29.17
+      user: asmi
+      repo_dir: ~/polymer_indent
+      python: .venv/bin/python
+      station_config: configs/stations/asmi.yaml
 
 arm:
   # xArm (bear-den-arm1, 10.210.29.16) + Vention rail (bear-den-vention, 10.210.29.15).
-  # The arm-transfer HTTP worker is the existing denos `arm_worker.py` (out of
-  # scope here). In denos it runs on keeper_pc (-> "http://localhost:5004"); the
-  # design-doc loop addresses it at the arm's own IP. Set whichever is right for
-  # your deployment.
+  # The arm-transfer HTTP worker (arm_worker/, extracted from denos) runs on the
+  # controller box (bear-den-keeper). In denos it ran on keeper too; the
+  # design-doc loop addresses it at the arm's own IP — use whichever fits.
   base_url: "http://10.210.29.16:5004"
   timeout_s: 300
+  local:                                                   # for `polymer-indent workers ... arm` (launched here, on the controller)
+    # command: ["python", "-m", "arm_worker", "--port", "5004"]   # default; uncomment + edit to add e.g. --mock
+    log: arm_worker.log                                    # written under <repo>/.run/
 
 opentrons:
   # Opentrons Flex at 10.210.29.218. Placeholder client — does not talk to the

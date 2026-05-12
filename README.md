@@ -76,6 +76,7 @@ configs/
   stations/{sharc,asmi}.yaml       station-worker server config (port, run dir, allow-list)
 polymer_indent/                    the controller package (no cubos dep)
   cli.py  experiment.py  protocol_render.py  results.py  loop.py  config.py
+  workers.py                                  start/stop/inspect device workers (SSH for stations, local for arm)
   clients/{cubos_station,arm_rail,opentrons}.py
 station_worker/                    the Flask worker run on each station Pi (imports cubos)
   app.py  worker.py  config.py  runs.py  allow.py  jsonify.py  __main__.py
@@ -149,13 +150,32 @@ pip install -e ".[arm]"                # flask + xarm-python-sdk + machine-logic
 
 ## Run
 
-Start each station worker on its Pi, and the arm worker on the controller box:
+Start each station worker on its Pi, and the arm worker on the controller box —
+either by hand:
 
 ```bash
 python -m station_worker --config configs/stations/sharc.yaml      # on the SHARC Pi
 python -m station_worker --config configs/stations/asmi.yaml       # on the ASMI Pi
 python -m arm_worker                                               # on keeper (port 5004); add --mock for no hardware
 ```
+
+…or from the controller box with `polymer-indent workers` (SSHes into each Pi
+via the `ssh:` blocks in `controller.yaml`; key-based auth only — run
+`ssh-copy-id <user>@<host>` from the controller first, no passwords anywhere):
+
+```bash
+polymer-indent workers status                 # /health for sharc, asmi, arm
+polymer-indent workers up                     # start all (idempotent — skips ones already up)
+polymer-indent workers up sharc asmi          # just the stations
+polymer-indent workers restart asmi
+polymer-indent workers logs asmi --lines 80   # tail the worker log on the Pi
+polymer-indent workers down                   # stop all
+```
+
+(The arm worker is launched as a detached local process on the controller box,
+tracked by a pidfile under `<repo>/.run/`. Stations are started over SSH as a
+detached `setsid python -m station_worker --config ...` writing to `worker.log`
+in the repo dir on the Pi.)
 
 Then from the controller:
 

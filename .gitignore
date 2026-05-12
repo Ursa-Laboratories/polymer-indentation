@@ -13,4 +13,6 @@ results/
 *.sqlite
 polymer_indent_runs/
 runs/
+# local arm-worker pidfile/log used by `polymer-indent workers ... arm`
+.run/
 .DS_Store

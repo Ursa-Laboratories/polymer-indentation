@@ -58,6 +58,12 @@ def build_parser() -> argparse.ArgumentParser:
     p_health = sub.add_parser("health", help="ping every device")
     _add_config_arg(p_health)
 
+    p_w = sub.add_parser("workers", help="start / stop / inspect the device workers")
+    p_w.add_argument("action", choices=["status", "up", "down", "restart", "logs"])
+    p_w.add_argument("devices", nargs="*", help="which workers (default: all configured) — e.g. sharc asmi arm")
+    p_w.add_argument("--lines", type=int, default=40, help="for 'logs': how many trailing lines")
+    _add_config_arg(p_w)
+
     return parser
 
 
@@ -130,6 +136,47 @@ def cmd_health(args: argparse.Namespace) -> int:
     return 0 if all_ok else 1
 
 
+def cmd_workers(args: argparse.Namespace) -> int:
+    from .workers import workers_from_config
+
+    cfg = load_controller_config(args.config)
+    devices = args.devices or None
+    handles = workers_from_config(cfg, devices)
+    if not handles:
+        print(f"no workers configured matching {args.devices or 'all'}")
+        return 2
+    if args.action == "logs":
+        if len(handles) != 1:
+            print("`workers logs` needs exactly one device, e.g.  workers logs asmi")
+            return 2
+        print(handles[0].logs(args.lines))
+        return 0
+
+    rc = 0
+    for h in handles:
+        try:
+            if args.action == "status":
+                up = h.is_up()
+                extra = ""
+                # SSH workers can also show the remote process line
+                if up is False and hasattr(h, "remote_processes"):
+                    procs = h.remote_processes()
+                    extra = f"  (remote process running but /health not responding: {procs})" if procs else ""
+                print(f"  {h.name:<10} {'UP  ' if up else 'DOWN'}  {h.base_url}{extra}")
+                rc = rc or (0 if up else 1)
+            elif args.action == "up":
+                print(f"  {h.name:<10} {h.start()}")
+            elif args.action == "down":
+                print(f"  {h.name:<10} {h.stop()}")
+            elif args.action == "restart":
+                h.stop()
+                print(f"  {h.name:<10} {h.start()}")
+        except Exception as exc:  # noqa: BLE001
+            rc = 1
+            print(f"  {h.name:<10} ERROR  {exc}")
+    return rc
+
+
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     _setup_logging(getattr(args, "verbose", False))
@@ -140,7 +187,9 @@ def main(argv: list[str] | None = None) -> int:
         candidate = repo_root / args.config
         if candidate.exists():
             args.config = str(candidate)
-    return {"run": cmd_run, "validate": cmd_validate, "health": cmd_health}[args.cmd](args)
+    return {
+        "run": cmd_run, "validate": cmd_validate, "health": cmd_health, "workers": cmd_workers,
+    }[args.cmd](args)
 
 
 if __name__ == "__main__":
