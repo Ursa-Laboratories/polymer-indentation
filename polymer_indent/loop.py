@@ -128,7 +128,7 @@ def _run_one_well(
 
     # 2. arm: opentrons -> uv_station
     _transfer(arm, results, experiment_id, well, step_id, "move-to-sharc",
-              "opentrons", "uv_station")
+              "opentrons", "uv_station", mock_mode=mock_mode)
 
     # 3. SHARC UV cure
     sharc_run_id = f"{step_id}:sharc"
@@ -142,7 +142,7 @@ def _run_one_well(
 
     # 4. arm: uv_station -> asmi
     _transfer(arm, results, experiment_id, well, step_id, "move-to-asmi",
-              "uv_station", "asmi")
+              "uv_station", "asmi", mock_mode=mock_mode)
 
     # 5. ASMI indentation
     asmi_run_id = f"{step_id}:asmi"
@@ -168,12 +168,13 @@ def _run_one_well(
 
     # 7. arm: asmi -> {storage_end | opentrons}
     _transfer(arm, results, experiment_id, well, step_id, "return",
-              "asmi", return_location)
+              "asmi", return_location, mock_mode=mock_mode)
 
 
-def _transfer(arm, results, experiment_id, well, step_id, tag, src, dst) -> None:
+def _transfer(arm, results, experiment_id, well, step_id, tag, src, dst, *, mock_mode=False) -> None:
     run_id = f"{step_id}:{tag}"
-    resp = arm.transfer(from_location=src, to_location=dst, run_id=run_id)
+    resp = arm.transfer(from_location=src, to_location=dst, run_id=run_id,
+                        mock_mode=True if mock_mode else None)
     results.record_run(
         run_id=run_id, experiment_id=experiment_id, well=well,
         kind="arm_transfer", station="xarm",

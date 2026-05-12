@@ -25,8 +25,8 @@ class FakeArm:
     def __init__(self):
         self.transfers = []
 
-    def transfer(self, *, from_location, to_location, run_id=None):
-        self.transfers.append((from_location, to_location, run_id))
+    def transfer(self, *, from_location, to_location, run_id=None, mock_mode=None):
+        self.transfers.append((from_location, to_location, run_id, mock_mode))
         return {"success": True, "from": from_location, "to": to_location}
 
 

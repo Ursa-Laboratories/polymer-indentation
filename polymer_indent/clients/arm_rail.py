@@ -44,16 +44,21 @@ class ArmRailClient:
         from_location: str,
         to_location: str,
         run_id: Optional[str] = None,
+        mock_mode: Optional[bool] = None,
     ) -> Dict[str, Any]:
         """Move the plate from one workcell location to another.
 
-        ``run_id`` is for logging only (the existing worker doesn't accept it);
-        it's sent as a best-effort hint and ignored if unsupported.
+        ``run_id`` is for logging/audit; ``mock_mode`` (when not ``None``) asks
+        the worker to run the pick/place sequence against logging-only stand-ins
+        instead of the real arm/rail. Both are sent as best-effort extras —
+        older arm workers ignore them.
         """
         payload: Dict[str, Any] = {"from": from_location, "to": to_location}
         if run_id:
             payload["run_id"] = run_id
-        log.info("arm transfer %s -> %s (run_id=%s)", from_location, to_location, run_id)
+        if mock_mode is not None:
+            payload["mock_mode"] = mock_mode
+        log.info("arm transfer %s -> %s (run_id=%s, mock=%s)", from_location, to_location, run_id, mock_mode)
         resp = post_json(
             self._session, f"{self.base_url}/run", payload, timeout=self.timeout_s
         )

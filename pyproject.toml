@@ -21,6 +21,15 @@ station = [
     "flask",
     "cubos @ git+https://github.com/ursa-laboratories/CubOS.git@staging",
 ]
+# The xArm + Vention-rail transfer worker (runs on the controller box). Needs
+# Python 3.10 — machine-logic-sdk doesn't support 3.11+ — plus the keeper_pc
+# repo's device_drivers/ on PYTHONPATH for VentionRailway. (`arm_worker --mock`
+# needs only flask.)
+arm = [
+    "flask",
+    "xarm-python-sdk==1.15.3",
+    "machine-logic-sdk==1.13.2",
+]
 dev = [
     "pytest",
 ]
@@ -29,7 +38,7 @@ dev = [
 polymer-indent = "polymer_indent.cli:main"
 
 [tool.setuptools]
-packages = ["polymer_indent", "polymer_indent.clients", "station_worker"]
+packages = ["polymer_indent", "polymer_indent.clients", "station_worker", "arm_worker"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
