@@ -22,7 +22,7 @@ protocol:
 
   - measure:
       instrument: uv_curing
-      position: plate_holder.plate.A1
+      position: plate_holder.plate.E5
       method: cure
       measurement_height: 1.0
       method_kwargs:
