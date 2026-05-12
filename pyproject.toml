@@ -15,11 +15,12 @@ dependencies = [
 
 [project.optional-dependencies]
 # Install on each station Pi:  pip install -e ".[station]"
-# (cubos is already present on the Pis via the ASMI_new / cubos checkouts; the
-# entry below makes a clean-machine install work too.)
+# cubos[asmi] pulls the Vernier GoDirect SDK (the ASMI Pi needs it; harmless on
+# the UV Pi). cubos is already present on the Pis via the ASMI_new / cubos
+# checkouts; this entry makes a clean-machine install work too.
 station = [
     "flask",
-    "cubos @ git+https://github.com/ursa-laboratories/CubOS.git@staging",
+    "cubos[asmi] @ git+https://github.com/ursa-laboratories/CubOS.git@staging",
 ]
 # The xArm + Vention-rail transfer worker (runs on the controller box). Needs
 # Python 3.10 — machine-logic-sdk doesn't support 3.11+ — plus the keeper_pc
