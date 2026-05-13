@@ -56,5 +56,9 @@ class OpentronsClient:
             "timestamp": time.time(),
         }
 
+    def stop(self) -> Dict[str, Any]:
+        log.warning("OpentronsClient.stop is a PLACEHOLDER (no hardware)")
+        return {"success": True, "placeholder": True}
+
 
 __all__ = ["OpentronsClient"]

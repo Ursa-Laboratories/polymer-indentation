@@ -44,6 +44,11 @@ class Experiment:
         is_last = well == self.wells[-1]
         return self.final_well_return_location if is_last else _NONFINAL_RETURN
 
+    def items(self):
+        """Iterate (well, resolved_params) in declared order."""
+        for w in self.wells:
+            yield w, self.params[w]
+
 
 def load_experiment(path: str | Path) -> Experiment:
     """Load and validate an experiment YAML.
