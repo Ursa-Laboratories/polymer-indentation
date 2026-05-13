@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import logging
 from typing import Any, Dict, Optional
+from urllib.parse import quote
 
 from ._http import HttpError, get_json, new_session, post_json
 
@@ -118,8 +119,6 @@ class CubOSStationClient:
         return resp
 
     def get_run(self, run_id: str) -> Dict[str, Any]:
-        from urllib.parse import quote
-
         return get_json(
             self._session,
             f"{self.base_url}/runs/{quote(run_id, safe='')}",

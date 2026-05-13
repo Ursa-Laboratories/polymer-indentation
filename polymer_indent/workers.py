@@ -214,20 +214,26 @@ def workers_from_config(cfg, names: Optional[List[str]] = None) -> "list":
 
 @dataclass
 class _HealthOnly:
-    """A station with no ssh: block — we can only report /health, not start/stop it."""
+    """A station with no ssh: block — we can only report /health, not start/stop it.
+
+    Any management call (``start`` / ``stop`` / ``logs``) raises with a clear
+    explanation that the station needs an ``ssh:`` block to be remotely managed.
+    """
     name: str
     base_url: str
 
     def is_up(self) -> bool:
         return _health(self.base_url) is not None
 
-    def _no_ssh(self):
-        raise RuntimeError(f"station '{self.name}' has no 'ssh:' block in controller.yaml — "
-                           f"can't manage it remotely (start it on its host, or add an ssh: block)")
-
-    def start(self, **_): self._no_ssh()
-    def stop(self, **_): self._no_ssh()
-    def logs(self, *_a, **_k): self._no_ssh()
+    def __getattr__(self, name: str):
+        if name in ("start", "stop", "logs"):
+            def _raise(*_a, **_k):
+                raise RuntimeError(
+                    f"station {self.name!r} has no 'ssh:' block in controller.yaml — "
+                    f"can't {name} it remotely (start it on its host, or add an ssh: block)"
+                )
+            return _raise
+        raise AttributeError(name)
 
 
 __all__ = ["SshWorker", "LocalWorker", "workers_from_config"]

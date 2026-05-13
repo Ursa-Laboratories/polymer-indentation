@@ -22,12 +22,14 @@ def test_help_does_not_crash():
 
 
 def test_apply_overrides_asmi():
+    from polymer_indent.protocol_render import apply_overrides, render_protocol
     base = (REPO_ROOT / "configs" / "protocol" / "asmi_indentation_test.yaml").read_text()
-    swapped = station_test.render_protocol(base, "C7")
-    out = station_test._apply_overrides(swapped, {
-        "scalar": {"indentation_limit_height": -3.0},
-        "method_kwargs": {"force_limit": 5.0, "step_size": 0.02},
-    })
+    swapped = render_protocol(base, "C7")
+    out = apply_overrides(
+        swapped,
+        scalar={"indentation_limit_height": -3.0},
+        method_kwargs={"force_limit": 5.0, "step_size": 0.02},
+    )
     doc = yaml.safe_load(out)
     measure = next(s["measure"] for s in doc["protocol"] if "measure" in s)
     assert measure["position"] == "plate.C7"
@@ -39,8 +41,9 @@ def test_apply_overrides_asmi():
 
 
 def test_apply_overrides_noop_when_empty():
+    from polymer_indent.protocol_render import apply_overrides
     base = "protocol:\n  - home:\n"
-    assert station_test._apply_overrides(base, {"scalar": {}, "method_kwargs": {}}) == base
+    assert apply_overrides(base) == base
 
 
 def test_summarize_results():

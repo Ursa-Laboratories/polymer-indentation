@@ -52,11 +52,10 @@ CONTROLLER_CONFIG          = "configs/controller.yaml"
 # Make the package importable when running from the repo without `pip install -e .`
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-import yaml  # noqa: E402
-
 from polymer_indent.config import load_controller_config  # noqa: E402
 from polymer_indent.experiment import Experiment  # noqa: E402
 from polymer_indent.loop import run_experiment  # noqa: E402
+from polymer_indent.protocol_render import apply_overrides  # noqa: E402
 
 logging.basicConfig(
     level=logging.INFO,
@@ -68,28 +67,6 @@ log = logging.getLogger("polymer_indent.main")
 # Opentrons fill is currently a placeholder — see polymer_indent/clients/opentrons.py
 # for the (still-no-op) implementation and the TODO with the real Flex REST flow.
 # `cfg.opentrons_client()` below returns that client.
-
-
-def _apply_overrides(protocol_yaml: str, edits: dict) -> str:
-    """Apply scalar / method_kwargs overrides to every measure/scan step in a
-    cubos protocol YAML. The well id is left untouched — the loop's
-    ``render_protocol`` swaps it later.
-    """
-    if not edits:
-        return protocol_yaml
-    doc = yaml.safe_load(protocol_yaml)
-    for step in (doc.get("protocol") or []):
-        if not isinstance(step, dict):
-            continue
-        for cmd, body in step.items():
-            if cmd not in ("measure", "scan") or not isinstance(body, dict):
-                continue
-            for k, v in edits.items():
-                if k in body:
-                    body[k] = v
-                elif isinstance(body.get("method_kwargs"), dict) and k in body["method_kwargs"]:
-                    body["method_kwargs"][k] = v
-    return yaml.safe_dump(doc, sort_keys=False)
 
 
 def main() -> int:
@@ -112,14 +89,14 @@ def main() -> int:
     # Apply the SETTINGS knobs as overrides on top of the frozen base protocols.
     # (well id is rewritten by the loop.)
     sharc = cfg.station_bundle("sharc")
-    sharc.base_protocol_yaml = _apply_overrides(
+    sharc.base_protocol_yaml = apply_overrides(
         sharc.base_protocol_yaml,
-        {"intensity": UV_INTENSITY, "exposure_time": UV_EXPOSURE_S},
+        method_kwargs={"intensity": UV_INTENSITY, "exposure_time": UV_EXPOSURE_S},
     )
     asmi = cfg.station_bundle("asmi")
-    asmi.base_protocol_yaml = _apply_overrides(
+    asmi.base_protocol_yaml = apply_overrides(
         asmi.base_protocol_yaml,
-        {"indentation_limit_height": ASMI_INDENT_LIMIT_HEIGHT},
+        scalar={"indentation_limit_height": ASMI_INDENT_LIMIT_HEIGHT},
     )
 
     arm = cfg.arm_client()

@@ -15,6 +15,9 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
+from typing import Optional
+
+import yaml
 
 # A1 .. H12 style well ids (one or more letters then one or more digits).
 _WELL_RE = re.compile(r"^[A-Za-z]+[0-9]+$")
@@ -81,6 +84,39 @@ def render_protocol(base_protocol: str | Path, well: str) -> str:
 def _looks_like_path(value: str | Path) -> bool:
     if isinstance(value, Path):
         return True
-    # Heuristic: protocol text always contains a newline and a "protocol:" key;
-    # a path won't.
+    # A single-line YAML/YML-suffixed string is treated as a path; otherwise we
+    # assume protocol text (which always contains newlines).
     return "\n" not in value and value.strip().endswith((".yaml", ".yml"))
+
+
+def apply_overrides(
+    protocol_yaml: str,
+    *,
+    scalar: Optional[dict] = None,
+    method_kwargs: Optional[dict] = None,
+) -> str:
+    """Apply overrides to every ``measure``/``scan`` step in a cubos protocol YAML.
+
+    ``scalar`` keys are set directly on each step body (e.g. ``measurement_height``,
+    ``indentation_limit_height``). ``method_kwargs`` keys are set inside the step's
+    ``method_kwargs`` mapping, creating it if absent.
+
+    Re-emits via ``yaml.safe_dump`` so comments in the input are lost — call
+    :func:`render_protocol` after this to swap the well id.
+    """
+    if not scalar and not method_kwargs:
+        return protocol_yaml
+    doc = yaml.safe_load(protocol_yaml) or {}
+    for step in (doc.get("protocol") or []):
+        if not isinstance(step, dict):
+            continue
+        for cmd, body in step.items():
+            if cmd not in ("measure", "scan") or not isinstance(body, dict):
+                continue
+            if scalar:
+                body.update(scalar)
+            if method_kwargs:
+                if not isinstance(body.get("method_kwargs"), dict):
+                    body["method_kwargs"] = {}
+                body["method_kwargs"].update(method_kwargs)
+    return yaml.safe_dump(doc, sort_keys=False)

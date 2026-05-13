@@ -25,7 +25,7 @@ import yaml  # noqa: E402
 
 from polymer_indent.clients import CubOSStationClient, StationRunError  # noqa: E402
 from polymer_indent.clients._http import HttpError  # noqa: E402
-from polymer_indent.protocol_render import render_protocol  # noqa: E402
+from polymer_indent.protocol_render import apply_overrides, render_protocol  # noqa: E402
 
 # station key in configs/controller.yaml -> (human label, kind of method_kwargs it takes)
 _STATIONS = {
@@ -85,24 +85,18 @@ def _build_parser(station_key: str) -> argparse.ArgumentParser:
     return p
 
 
+_SCALAR_FIELDS = ("measurement_height", "indentation_limit_height", "interwell_scan_height")
+_METHOD_KWARGS_BY_STATION = {
+    "asmi":  ("step_size", "force_limit", "baseline_samples"),
+    "sharc": ("intensity", "exposure_time"),
+}
+
+
 def _collect_overrides(args, station_key: str) -> dict:
-    scalar = {}
-    for name in ("measurement_height", "indentation_limit_height", "interwell_scan_height"):
-        val = getattr(args, name, None)
-        if val is not None:
-            scalar[name] = val
-    mk = {}
-    if station_key == "asmi":
-        for name in ("step_size", "force_limit", "baseline_samples"):
-            val = getattr(args, name, None)
-            if val is not None:
-                mk[name] = val
-    else:
-        for src_name, dst_name in (("intensity", "intensity"), ("exposure_time", "exposure_time")):
-            val = getattr(args, src_name, None)
-            if val is not None:
-                mk[dst_name] = val
-    return {"scalar": scalar, "method_kwargs": mk}
+    def _pull(names):
+        return {n: getattr(args, n) for n in names if getattr(args, n, None) is not None}
+    return {"scalar": _pull(_SCALAR_FIELDS),
+            "method_kwargs": _pull(_METHOD_KWARGS_BY_STATION[station_key])}
 
 
 # --------------------------------------------------------------------------- protocol build
@@ -110,28 +104,6 @@ def _collect_overrides(args, station_key: str) -> dict:
 def _resolve(path: str | Path) -> Path:
     path = Path(path).expanduser()
     return path if path.is_absolute() else (REPO_ROOT / path)
-
-
-def _apply_overrides(protocol_yaml: str, overrides: dict) -> str:
-    """Re-emit the protocol with the given scalar / method_kwargs overrides applied
-    to every measure/scan step. (Parse + redump — loses base-file comments, which
-    is fine for a one-off test run.)"""
-    if not overrides["scalar"] and not overrides["method_kwargs"]:
-        return protocol_yaml
-    doc = yaml.safe_load(protocol_yaml) or {}
-    for step in doc.get("protocol", []):
-        if not isinstance(step, dict):
-            continue
-        for cmd, body in step.items():
-            if cmd not in ("measure", "scan") or not isinstance(body, dict):
-                continue
-            for k, v in overrides["scalar"].items():
-                body[k] = v
-            if overrides["method_kwargs"]:
-                if not isinstance(body.get("method_kwargs"), dict):
-                    body["method_kwargs"] = {}
-                body["method_kwargs"].update(overrides["method_kwargs"])
-    return yaml.safe_dump(doc, sort_keys=False)
 
 
 # --------------------------------------------------------------------------- run
@@ -165,7 +137,9 @@ def run(station_key: str, argv=None) -> int:
             protocol_yaml = render_protocol(protocol_yaml, args.well)
         except ValueError as exc:
             print(f"note: couldn't swap a well into {protocol_path.name} ({exc}); sending it verbatim")
-    protocol_yaml = _apply_overrides(protocol_yaml, _collect_overrides(args, station_key))
+    overrides = _collect_overrides(args, station_key)
+    protocol_yaml = apply_overrides(protocol_yaml, scalar=overrides["scalar"],
+                                     method_kwargs=overrides["method_kwargs"])
 
     print(_BAR)
     print(f"{info['label']} test   station={station_key}   url={base_url}   mock={args.mock}")
