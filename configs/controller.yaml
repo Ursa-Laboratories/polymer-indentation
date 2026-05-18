@@ -65,11 +65,9 @@ arm:
     log: arm_worker.log                                    # written under <repo>/.run/
 
 opentrons:
-  # Opentrons Flex at 10.210.29.218. Placeholder client — does not talk to the
-  # Flex yet. base_url kept for when the real integration lands (denos ran an
-  # Opentrons HTTP shim on keeper_pc at :5003 that drives the Flex REST API on
-  # :31950).
-  base_url: "http://10.210.29.218:5003"
+  # Opentrons Flex at 10.210.29.218. The controller talks directly to the Flex
+  # HTTP API: upload protocol -> create run -> play -> poll.
+  base_url: "http://10.210.29.218:31950"
   timeout_s: 600
 
 results:

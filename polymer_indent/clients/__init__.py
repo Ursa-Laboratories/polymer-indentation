@@ -2,6 +2,12 @@
 
 from .arm_rail import ArmRailClient
 from .cubos_station import CubOSStationClient, StationRunError
-from .opentrons import OpentronsClient
+from .opentrons import OpentronsClient, OpentronsRunError
 
-__all__ = ["ArmRailClient", "CubOSStationClient", "StationRunError", "OpentronsClient"]
+__all__ = [
+    "ArmRailClient",
+    "CubOSStationClient",
+    "StationRunError",
+    "OpentronsClient",
+    "OpentronsRunError",
+]

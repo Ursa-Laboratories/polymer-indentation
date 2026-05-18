@@ -136,8 +136,12 @@ def _run_one_well(
         call=lambda: opentrons.run_fill(
             well=well,
             volume_ul=params.get("volume_ul", 350),
+            source_well=params.get("source_well"),
             formulation=params.get("formulation"),
             run_id=f"{step_id}:fill",
+            flow_rate_ul_min=params.get("flow_rate_ul_min", 150),
+            air_expulsion_ul=params.get("air_expulsion_ul", 20),
+            tip_lift_height_mm=params.get("tip_lift_height_mm", 8),
         ),
         wrap=lambda fill: ({"success": _require_success(fill, "opentrons_fill"), "result": fill}),
     )

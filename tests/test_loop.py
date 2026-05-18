@@ -16,8 +16,8 @@ class FakeOpentrons:
     def __init__(self):
         self.calls = []
 
-    def run_fill(self, *, well, volume_ul, formulation=None, run_id=None):
-        self.calls.append(("fill", well, volume_ul, formulation, run_id))
+    def run_fill(self, *, well, volume_ul, source_well=None, formulation=None, run_id=None, **kwargs):
+        self.calls.append(("fill", well, volume_ul, source_well, formulation, run_id, kwargs))
         return {"success": True, "well": well, "volume_dispensed": volume_ul}
 
 
@@ -91,6 +91,26 @@ def test_per_well_sequence_and_last_well_routing(tmp_path):
         assert results.well_status("e1", "A3") == "done"
         kinds = {row["kind"] for row in results.runs_for_well("e1", "A1")}
         assert kinds == {"opentrons_fill", "arm_transfer", "sharc", "asmi"}
+
+
+def test_source_well_params_are_passed_to_opentrons(tmp_path):
+    exp = _exp(tmp_path, wells=["A1"])
+    exp.params["A1"].update({
+        "source_well": "B1",
+        "volume_ul": 100,
+        "flow_rate_ul_min": 150,
+        "air_expulsion_ul": 20,
+        "tip_lift_height_mm": 8,
+    })
+    ot, arm = FakeOpentrons(), FakeArm()
+    sharc, asmi = _bundles()
+    with ResultStore(tmp_path / "r.db") as results:
+        run_experiment(exp, opentrons=ot, arm=arm, sharc=sharc, asmi=asmi,
+                       results=results, mock_mode=True)
+    assert ot.calls == [
+        ("fill", "A1", 100, "B1", None, "e1:A1:fill",
+         {"flow_rate_ul_min": 150, "air_expulsion_ul": 20, "tip_lift_height_mm": 8})
+    ]
 
 
 def test_mock_mode_propagates_to_stations(tmp_path):
