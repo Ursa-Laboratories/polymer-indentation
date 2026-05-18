@@ -13,6 +13,31 @@ For each ``(source_tube, target_well)`` transfer in ``TRANSFERS``:
 
 Edit the SETTINGS block below and run:
     python main_bioadhesives_workcell.py
+
+How this script fits into the workcell stack
+--------------------------------------------
+This file is pure configuration + glue. The actual per-well orchestration
+lives in ``polymer_indent.loop.run_experiment``, which calls (per well, in
+order):
+
+  1. ``OpentronsClient.run_fill``  — generates a fresh one-transfer Flex
+                                     protocol from the SETTINGS below and
+                                     ships it to the Opentrons HTTP API.
+  2. ``ArmRailClient.transfer``    — opentrons -> uv_station.
+  3. ``CubOSStationClient.run_protocol`` on SHARC — sends a YAML built by
+                                     ``apply_overrides`` + ``render_protocol``
+                                     (well id swapped per iteration).
+  4. ``ArmRailClient.transfer``    — uv_station -> asmi.
+  5. ``CubOSStationClient.run_protocol`` on ASMI  — same YAML pattern.
+  6. ``ArmRailClient.transfer``    — asmi -> opentrons (or, on the last
+                                     well, to ``FINAL_RETURN_LOCATION``).
+
+The arm worker has a fixed route table keyed on the location names above
+(``opentrons``, ``uv_station``, ``asmi``, ``storage_end``, ``storage_start``);
+the ``*_SLOT`` settings here pick the Opentrons deck slots used by the
+generated dispense protocol and must agree with the arm worker's
+opentrons-side pickup point. SHARC/ASMI tunables ride on the cubos
+protocol YAML via ``apply_overrides``.
 """
 
 from __future__ import annotations
@@ -37,6 +62,11 @@ TRANSFERS = [
     ("B1", "B2"),
     ("B1", "B3"),
 ]
+
+# Opentrons deck slots — must match the arm worker's opentrons pickup point.
+OPENTRONS_TIP_RACK_SLOT = "A2"
+OPENTRONS_TUBE_RACK_SLOT = "B2"
+OPENTRONS_PLATE_SLOT = "D2"
 
 # Opentrons viscous transfer settings
 OPENTRONS_VOLUME_UL = 100
@@ -79,6 +109,9 @@ def main() -> int:
         "flow_rate_ul_min": OPENTRONS_FLOW_RATE_UL_MIN,
         "air_expulsion_ul": OPENTRONS_AIR_EXPULSION_UL,
         "tip_lift_height_mm": OPENTRONS_TIP_LIFT_HEIGHT_MM,
+        "tip_rack_slot": OPENTRONS_TIP_RACK_SLOT,
+        "tube_rack_slot": OPENTRONS_TUBE_RACK_SLOT,
+        "plate_slot": OPENTRONS_PLATE_SLOT,
         "uv_intensity": UV_INTENSITY,
         "uv_time": UV_EXPOSURE_S,
         "asmi_indentation_limit_height": ASMI_INDENT_LIMIT_HEIGHT,

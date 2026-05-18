@@ -109,7 +109,8 @@ def test_source_well_params_are_passed_to_opentrons(tmp_path):
                        results=results, mock_mode=True)
     assert ot.calls == [
         ("fill", "A1", 100, "B1", None, "e1:A1:fill",
-         {"flow_rate_ul_min": 150, "air_expulsion_ul": 20, "tip_lift_height_mm": 8})
+         {"flow_rate_ul_min": 150, "air_expulsion_ul": 20, "tip_lift_height_mm": 8,
+          "tip_rack_slot": "A2", "tube_rack_slot": "B2", "plate_slot": "D2"})
     ]
 
 

@@ -43,8 +43,15 @@ def render_viscous_fill_protocol(
     flow_rate_ul_min: float = 150.0,
     air_expulsion_ul: float = 20.0,
     tip_lift_height_mm: float = 8.0,
+    tip_rack_slot: str = "A2",
+    tube_rack_slot: str = "B2",
+    plate_slot: str = "D2",
 ) -> str:
-    """Return a one-transfer Flex protocol derived from the pilot script."""
+    """Return a one-transfer Flex protocol derived from the pilot script.
+
+    Deck slots must match the arm worker's route table — the arm hands the
+    plate off at the physical location it associates with ``plate_slot``.
+    """
     source_well = _normalize_well(source_well)
     target_well = _normalize_well(target_well)
     return f'''from opentrons import protocol_api
@@ -96,9 +103,9 @@ custom_tube_rack = {{
 
 
 def run(protocol: protocol_api.ProtocolContext):
-    tips = protocol.load_labware("opentrons_flex_96_tiprack_1000ul", "A2")
-    stock_rack = protocol.load_labware_from_definition(custom_tube_rack, "B2")
-    plate = protocol.load_labware("corning_96_wellplate_360ul_flat", "D2")
+    tips = protocol.load_labware("opentrons_flex_96_tiprack_1000ul", "{tip_rack_slot}")
+    stock_rack = protocol.load_labware_from_definition(custom_tube_rack, "{tube_rack_slot}")
+    plate = protocol.load_labware("corning_96_wellplate_360ul_flat", "{plate_slot}")
     p1000 = protocol.load_instrument("flex_1channel_1000", "right", tip_racks=[tips])
 
     p1000.flow_rate.aspirate = {float(flow_rate_ul_min)!r}
@@ -150,6 +157,9 @@ class OpentronsClient:
         flow_rate_ul_min: float = 150.0,
         air_expulsion_ul: float = 20.0,
         tip_lift_height_mm: float = 8.0,
+        tip_rack_slot: str = "A2",
+        tube_rack_slot: str = "B2",
+        plate_slot: str = "D2",
     ) -> Dict[str, Any]:
         """Dispense ``volume_ul`` of ``formulation`` into ``well``.
 
@@ -168,6 +178,9 @@ class OpentronsClient:
                 flow_rate_ul_min=flow_rate_ul_min,
                 air_expulsion_ul=air_expulsion_ul,
                 tip_lift_height_mm=tip_lift_height_mm,
+                tip_rack_slot=tip_rack_slot,
+                tube_rack_slot=tube_rack_slot,
+                plate_slot=plate_slot,
             )
 
         log.warning(
@@ -197,6 +210,9 @@ class OpentronsClient:
         flow_rate_ul_min: float,
         air_expulsion_ul: float,
         tip_lift_height_mm: float,
+        tip_rack_slot: str,
+        tube_rack_slot: str,
+        plate_slot: str,
     ) -> Dict[str, Any]:
         protocol_text = render_viscous_fill_protocol(
             source_well=source_well,
@@ -205,6 +221,9 @@ class OpentronsClient:
             flow_rate_ul_min=flow_rate_ul_min,
             air_expulsion_ul=air_expulsion_ul,
             tip_lift_height_mm=tip_lift_height_mm,
+            tip_rack_slot=tip_rack_slot,
+            tube_rack_slot=tube_rack_slot,
+            plate_slot=plate_slot,
         )
         protocol_id = self._upload_protocol(protocol_text, key=run_id)
         robot_run_id = self._create_run(protocol_id)

@@ -142,6 +142,9 @@ def _run_one_well(
             flow_rate_ul_min=params.get("flow_rate_ul_min", 150),
             air_expulsion_ul=params.get("air_expulsion_ul", 20),
             tip_lift_height_mm=params.get("tip_lift_height_mm", 8),
+            tip_rack_slot=params.get("tip_rack_slot", "A2"),
+            tube_rack_slot=params.get("tube_rack_slot", "B2"),
+            plate_slot=params.get("plate_slot", "D2"),
         ),
         wrap=lambda fill: ({"success": _require_success(fill, "opentrons_fill"), "result": fill}),
     )
