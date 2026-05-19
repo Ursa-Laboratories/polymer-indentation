@@ -31,6 +31,48 @@ Replaces `denos`, built on the cleaned-up CubOS YAML interfaces.
 | Arm + rail | `bear-den-arm1` (xArm) 10.210.29.16 / `bear-den-vention` 10.210.29.15 | arm worker on the controller, `localhost:5004` | — | — | `python -m arm_worker` (in this repo; talks TCP to .16 / .15) |
 | Opentrons | Flex 10.210.29.218 | shim `:5003` | — | — | placeholder client only |
 
+## Quick start: manual hardware run
+
+Use three terminals: one SSH session for the UV-cure Raspberry Pi, one SSH
+session for the ASMI Raspberry Pi, and one desktop/controller terminal.
+
+### 1. Start the UV-cure station server
+
+From the desktop/controller:
+
+```bash
+ssh sartorius-scale@10.210.29.12
+cd ~/polymer_indent
+.venv/bin/python -m station_worker --config configs/stations/sharc.yaml
+```
+
+Leave this SSH terminal open. The server should listen on `10.210.29.12:8000`.
+
+### 2. Start the ASMI station server
+
+From a second desktop/controller terminal:
+
+```bash
+ssh asmi@10.210.29.17
+cd ~/polymer_indent
+.venv/bin/python -m station_worker --config configs/stations/asmi.yaml
+```
+
+Leave this SSH terminal open. The server should listen on `10.210.29.17:8000`.
+
+### 3. Start the run from the desktop/controller
+
+From the desktop/controller repo checkout:
+
+```bash
+cd /Users/charl/Programming/panda/polymer_indent
+python main.py
+```
+
+Edit the settings block at the top of `main.py` before running if you need to
+change the well, UV intensity/time, ASMI indentation height, or final return
+location.
+
 ## The clean split
 
 - **Main controller** (`polymer_indent/`, this machine): runs the per-well
