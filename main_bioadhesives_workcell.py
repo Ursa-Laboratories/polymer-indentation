@@ -80,6 +80,7 @@ UV_EXPOSURE_S = 5.0
 
 # ASMI indentation
 ASMI_INDENT_LIMIT_HEIGHT = 1.5
+ASMI_MEASURE_WITH_RETURN = True   # record up-sweep samples in addition to descent
 
 # Where the plate goes after the final ASMI run.
 FINAL_RETURN_LOCATION = "storage_end"
@@ -137,6 +138,7 @@ def main() -> int:
     asmi.base_protocol_yaml = apply_overrides(
         asmi.base_protocol_yaml,
         scalar={"indentation_limit_height": ASMI_INDENT_LIMIT_HEIGHT},
+        method_kwargs={"measure_with_return": ASMI_MEASURE_WITH_RETURN},
     )
 
     log.info("=" * 72)
