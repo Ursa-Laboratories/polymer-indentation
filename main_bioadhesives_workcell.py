@@ -96,11 +96,17 @@ ASMI_MEASURE_WITH_RETURN = True   # record up-sweep samples in addition to desce
 
 # Where the plate goes after the final ASMI run.
 FINAL_RETURN_LOCATION = "storage_end"
+
+# Set True to skip the Opentrons dispense — the OpentronsClient placeholder
+# (no base_url) logs a warning and returns success, so arm + SHARC + ASMI run
+# end-to-end while the result store still gets an "opentrons_fill" row.
+SKIP_OPENTRONS_FILL = False
 # =============================================================================
 
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+from polymer_indent.clients import OpentronsClient  # noqa: E402
 from polymer_indent.config import load_controller_config  # noqa: E402
 from polymer_indent.experiment import Experiment  # noqa: E402
 from polymer_indent.loop import run_experiment  # noqa: E402
@@ -163,10 +169,14 @@ def main() -> int:
                  source, target, uv_s, target)
     log.info("=" * 72)
 
+    opentrons = OpentronsClient(None) if SKIP_OPENTRONS_FILL else cfg.opentrons_client()
+    if SKIP_OPENTRONS_FILL:
+        log.warning("SKIP_OPENTRONS_FILL=True — Opentrons step will be a no-op placeholder")
+
     with cfg.result_store() as results:
         failed = run_experiment(
             experiment,
-            opentrons=cfg.opentrons_client(),
+            opentrons=opentrons,
             arm=cfg.arm_client(),
             sharc=sharc,
             asmi=asmi,
