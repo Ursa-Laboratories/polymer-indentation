@@ -73,6 +73,7 @@ def run_experiment(
 
     wells = list(_select_wells(experiment, only_wells))
     already_done = results.done_wells(experiment.id) if resume else set()
+    experiment_id = experiment.id
 
     failed = 0
     for well in wells:
@@ -80,133 +81,100 @@ def run_experiment(
             log.info("well %s: already done — skipping (resume)", well)
             continue
         params = experiment.well_params(well)
-        step_id = f"{experiment.id}:{well}"
+        step_id = f"{experiment_id}:{well}"
         return_location = experiment.return_location(well)
         try:
-            _run_one_well(
-                experiment_id=experiment.id,
-                well=well,
-                params=params,
-                step_id=step_id,
-                return_location=return_location,
-                opentrons=opentrons,
-                arm=arm,
-                sharc=sharc,
-                asmi=asmi,
-                results=results,
-                sharc_mock=sharc_mock,
-                asmi_mock=asmi_mock,
-                arm_mock=arm_mock,
+            # 1. Opentrons fill
+            _record_step(
+                results, run_id=f"{step_id}:fill", experiment_id=experiment_id, well=well,
+                kind="opentrons_fill", station="opentrons",
+                call=lambda: opentrons.run_fill(
+                    well=well,
+                    volume_ul=params.get("volume_ul", 350),
+                    source_well=params.get("source_well"),
+                    formulation=params.get("formulation"),
+                    run_id=f"{step_id}:fill",
+                    flow_rate_ul_min=params.get("flow_rate_ul_min", 150),
+                    air_expulsion_ul=params.get("air_expulsion_ul", 20),
+                    tip_lift_height_mm=params.get("tip_lift_height_mm", 8),
+                    tip_rack_slot=params.get("tip_rack_slot", "A2"),
+                    tube_rack_slot=params.get("tube_rack_slot", "B2"),
+                    plate_slot=params.get("plate_slot", "D2"),
+                    plate_labware=params.get("plate_labware", "corning_96_wellplate_360ul_flat"),
+                ),
             )
-            results.set_well_status(experiment.id, well, "done")
+
+            # 2a. Park the SHARC gantry at home so the arm can deposit safely.
+            _home_station(sharc, "sharc", results,
+                          experiment_id=experiment_id, well=well, step_id=step_id,
+                          mock_mode=sharc_mock)
+
+            # 2. arm: opentrons -> uv_station
+            _transfer(arm, results, experiment_id, well, step_id, "move-to-sharc",
+                      "opentrons", "uv_station", mock_mode=arm_mock)
+
+            # 3. SHARC UV cure
+            sharc_run_id = f"{step_id}:sharc"
+            sharc_yaml = sharc.base_protocol_yaml
+            if "uv_exposure_s" in params:
+                sharc_yaml = apply_overrides(
+                    sharc_yaml,
+                    method_kwargs={"exposure_time": params["uv_exposure_s"]},
+                )
+            sharc_protocol_yaml = render_protocol(sharc_yaml, well)
+            _record_step(
+                results, run_id=sharc_run_id, experiment_id=experiment_id, well=well,
+                kind="sharc", station="sharc", protocol_yaml=sharc_protocol_yaml,
+                call=lambda: sharc.client.run_protocol(
+                    run_id=sharc_run_id,
+                    protocol_yaml=sharc_protocol_yaml,
+                    metadata={"experiment_id": experiment_id, "well": well, "step": "sharc"},
+                    mock_mode=sharc_mock,
+                ),
+            )
+
+            # 4a. Park the ASMI gantry at home so the arm can deposit safely.
+            _home_station(asmi, "asmi", results,
+                          experiment_id=experiment_id, well=well, step_id=step_id,
+                          mock_mode=asmi_mock)
+
+            # 4. arm: uv_station -> asmi
+            _transfer(arm, results, experiment_id, well, step_id, "move-to-asmi",
+                      "uv_station", "asmi", mock_mode=arm_mock)
+
+            # 5. ASMI indentation
+            asmi_run_id = f"{step_id}:asmi"
+            asmi_protocol_yaml = render_protocol(asmi.base_protocol_yaml, well)
+            _record_step(
+                results, run_id=asmi_run_id, experiment_id=experiment_id, well=well,
+                kind="asmi", station="asmi", protocol_yaml=asmi_protocol_yaml,
+                call=lambda: asmi.client.run_protocol(
+                    run_id=asmi_run_id,
+                    protocol_yaml=asmi_protocol_yaml,
+                    metadata={"experiment_id": experiment_id, "well": well, "step": "asmi"},
+                    mock_mode=asmi_mock,
+                ),
+            )
+
+            # 6. arm: asmi -> {storage_end | opentrons}
+            _transfer(arm, results, experiment_id, well, step_id, "return",
+                      "asmi", return_location, mock_mode=arm_mock)
+
+            results.set_well_status(experiment_id, well, "done")
             log.info("well %s: done", well)
         except Exception as exc:  # noqa: BLE001 — one bad well shouldn't be silent
             failed += 1
-            results.set_well_status(experiment.id, well, "failed", error=repr(exc))
+            results.set_well_status(experiment_id, well, "failed", error=repr(exc))
             log.exception("well %s: FAILED — %s", well, exc)
             if not continue_on_error:
-                results.finish_experiment(experiment.id, "failed")
+                results.finish_experiment(experiment_id, "failed")
                 raise
 
     status = "failed" if failed else "completed"
-    results.finish_experiment(experiment.id, status)
+    results.finish_experiment(experiment_id, status)
     log.info("experiment %s: %s (%d/%d wells failed)",
-             experiment.id, status, failed, len(wells))
+             experiment_id, status, failed, len(wells))
     return failed
-
-
-def _run_one_well(
-    *,
-    experiment_id: str,
-    well: str,
-    params: dict,
-    step_id: str,
-    return_location: str,
-    opentrons: OpentronsClient,
-    arm: ArmRailClient,
-    sharc: StationBundle,
-    asmi: StationBundle,
-    results: ResultStore,
-    sharc_mock: bool = False,
-    asmi_mock: bool = False,
-    arm_mock: bool = False,
-) -> None:
-    # 1. Opentrons fill (placeholder)
-    _record_call(
-        results, run_id=f"{step_id}:fill", experiment_id=experiment_id, well=well,
-        kind="opentrons_fill", station="opentrons",
-        call=lambda: opentrons.run_fill(
-            well=well,
-            volume_ul=params.get("volume_ul", 350),
-            source_well=params.get("source_well"),
-            formulation=params.get("formulation"),
-            run_id=f"{step_id}:fill",
-            flow_rate_ul_min=params.get("flow_rate_ul_min", 150),
-            air_expulsion_ul=params.get("air_expulsion_ul", 20),
-            tip_lift_height_mm=params.get("tip_lift_height_mm", 8),
-            tip_rack_slot=params.get("tip_rack_slot", "A2"),
-            tube_rack_slot=params.get("tube_rack_slot", "B2"),
-            plate_slot=params.get("plate_slot", "D2"),
-            plate_labware=params.get("plate_labware", "corning_96_wellplate_360ul_flat"),
-        ),
-        wrap=lambda fill: ({"success": _require_success(fill, "opentrons_fill"), "result": fill}),
-    )
-
-    # 2a. Park the SHARC gantry at home so the arm can deposit safely.
-    _home_station(sharc, "sharc", results,
-                  experiment_id=experiment_id, well=well, step_id=step_id,
-                  mock_mode=sharc_mock)
-
-    # 2. arm: opentrons -> uv_station
-    _transfer(arm, results, experiment_id, well, step_id, "move-to-sharc",
-              "opentrons", "uv_station", mock_mode=arm_mock)
-
-    # 3. SHARC UV cure
-    sharc_run_id = f"{step_id}:sharc"
-    sharc_yaml = sharc.base_protocol_yaml
-    if "uv_exposure_s" in params:
-        sharc_yaml = apply_overrides(
-            sharc_yaml,
-            method_kwargs={"exposure_time": params["uv_exposure_s"]},
-        )
-    sharc_protocol_yaml = render_protocol(sharc_yaml, well)
-    _run_station_step(
-        results, run_id=sharc_run_id, experiment_id=experiment_id, well=well,
-        kind="sharc", station="sharc", protocol_yaml=sharc_protocol_yaml,
-        call=lambda: sharc.client.run_protocol(
-            run_id=sharc_run_id,
-            protocol_yaml=sharc_protocol_yaml,
-            metadata={"experiment_id": experiment_id, "well": well, "step": "sharc"},
-            mock_mode=sharc_mock,
-        ),
-    )
-
-    # 4a. Park the ASMI gantry at home so the arm can deposit safely.
-    _home_station(asmi, "asmi", results,
-                  experiment_id=experiment_id, well=well, step_id=step_id,
-                  mock_mode=asmi_mock)
-
-    # 4. arm: uv_station -> asmi
-    _transfer(arm, results, experiment_id, well, step_id, "move-to-asmi",
-              "uv_station", "asmi", mock_mode=arm_mock)
-
-    # 5. ASMI indentation
-    asmi_run_id = f"{step_id}:asmi"
-    asmi_protocol_yaml = render_protocol(asmi.base_protocol_yaml, well)
-    _run_station_step(
-        results, run_id=asmi_run_id, experiment_id=experiment_id, well=well,
-        kind="asmi", station="asmi", protocol_yaml=asmi_protocol_yaml,
-        call=lambda: asmi.client.run_protocol(
-            run_id=asmi_run_id,
-            protocol_yaml=asmi_protocol_yaml,
-            metadata={"experiment_id": experiment_id, "well": well, "step": "asmi"},
-            mock_mode=asmi_mock,
-        ),
-    )
-
-    # 6. arm: asmi -> {storage_end | opentrons}
-    _transfer(arm, results, experiment_id, well, step_id, "return",
-              "asmi", return_location, mock_mode=arm_mock)
 
 
 def _require_success(payload, kind: str) -> bool:
@@ -216,49 +184,9 @@ def _require_success(payload, kind: str) -> bool:
     return bool(payload["success"])
 
 
-def _record_call(results, *, run_id, experiment_id, well, kind, station, call, wrap):
-    """Run ``call``; record the row (success or failure) before returning/re-raising."""
-    started = time.time()
-    try:
-        payload = call()
-    except Exception as exc:
-        results.record_run(
-            run_id=run_id, experiment_id=experiment_id, well=well,
-            kind=kind, station=station,
-            success=False, started_at=started, finished_at=time.time(),
-            error=f"{type(exc).__name__}: {exc}",
-        )
-        raise
-    record = wrap(payload)
-    results.record_run(
-        run_id=run_id, experiment_id=experiment_id, well=well,
-        kind=kind, station=station,
-        success=record["success"], started_at=started, finished_at=time.time(),
-        result=record["result"],
-    )
-
-
-_HOME_ONLY_PROTOCOL_YAML = "protocol:\n  - home:\n"
-
-
-def _home_station(station: StationBundle, name: str, results, *,
-                  experiment_id: str, well: str, step_id: str, mock_mode: bool) -> None:
-    """Send a home-only protocol so the gantry is parked before the arm deposits."""
-    run_id = f"{step_id}:home-{name}"
-    _run_station_step(
-        results, run_id=run_id, experiment_id=experiment_id, well=well,
-        kind=f"{name}_home", station=name, protocol_yaml=_HOME_ONLY_PROTOCOL_YAML,
-        call=lambda: station.client.run_protocol(
-            run_id=run_id,
-            protocol_yaml=_HOME_ONLY_PROTOCOL_YAML,
-            metadata={"experiment_id": experiment_id, "well": well, "step": f"{name}_home"},
-            mock_mode=mock_mode,
-        ),
-    )
-
-
-def _run_station_step(results, *, run_id, experiment_id, well, kind, station, protocol_yaml, call):
-    """SHARC / ASMI station step: run, then persist protocol_yaml + result + artifacts in one row."""
+def _record_step(results, *, run_id, experiment_id, well, kind, station, call,
+                 protocol_yaml=None):
+    """Run ``call``; persist a runs row (success or failure) before returning/re-raising."""
     started = time.time()
     try:
         resp = call()
@@ -278,6 +206,25 @@ def _run_station_step(results, *, run_id, experiment_id, well, kind, station, pr
         protocol_yaml=protocol_yaml,
         result=resp.get("results", resp),
         artifacts=resp.get("artifacts"),
+    )
+
+
+_HOME_ONLY_PROTOCOL_YAML = "protocol:\n  - home:\n"
+
+
+def _home_station(station: StationBundle, name: str, results, *,
+                  experiment_id: str, well: str, step_id: str, mock_mode: bool) -> None:
+    """Send a home-only protocol so the gantry is parked before the arm deposits."""
+    run_id = f"{step_id}:home-{name}"
+    _record_step(
+        results, run_id=run_id, experiment_id=experiment_id, well=well,
+        kind=f"{name}_home", station=name, protocol_yaml=_HOME_ONLY_PROTOCOL_YAML,
+        call=lambda: station.client.run_protocol(
+            run_id=run_id,
+            protocol_yaml=_HOME_ONLY_PROTOCOL_YAML,
+            metadata={"experiment_id": experiment_id, "well": well, "step": f"{name}_home"},
+            mock_mode=mock_mode,
+        ),
     )
 
 
